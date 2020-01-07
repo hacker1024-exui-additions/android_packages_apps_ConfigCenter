@@ -27,15 +27,22 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.hardware.fingerprint.FingerprintManager;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Surface;
-import androidx.preference.SwitchPreference;
-import androidx.preference.ListPreference;
-import androidx.preference.Preference;
-import androidx.preference.PreferenceScreen;
+import androidx.preference.*;
 
 import com.android.settings.R;
 import com.android.settings.SettingsPreferenceFragment;
 import android.provider.Settings;
+
+import com.exui.config.center.preferences.AppMultiSelectListPreference;
+import com.exui.config.center.preferences.ScrollAppsViewPreference;
+
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 
 public class ConfigCenter extends SettingsPreferenceFragment
         implements Preference.OnPreferenceChangeListener {
@@ -47,10 +54,18 @@ public class ConfigCenter extends SettingsPreferenceFragment
     private FingerprintManager mFingerprintManager;
     private SwitchPreference mFingerprintVib;
 
+    private static final String KEY_ASPECT_RATIO_APPS_ENABLED = "aspect_ratio_apps_enabled";
+    private static final String KEY_ASPECT_RATIO_APPS_LIST = "aspect_ratio_apps_list";
+    private static final String KEY_ASPECT_RATIO_CATEGORY = "aspect_ratio_category";
+    private static final String KEY_ASPECT_RATIO_APPS_LIST_SCROLLER = "aspect_ratio_apps_list_scroller";
+
     private ListPreference mHeadsUpTimeOut;
     private ListPreference mHeadsUpSnoozeTime;
     private Preference mChargingLeds;
     private Preference mFODIconPicker;
+
+    private AppMultiSelectListPreference mAspectRatioAppsSelect;
+    private ScrollAppsViewPreference mAspectRatioApps;
 
     @Override
     public void onCreate(Bundle icicle) {
@@ -105,6 +120,31 @@ public class ConfigCenter extends SettingsPreferenceFragment
                 Settings.System.FINGERPRINT_SUCCESS_VIB, 1) == 1));
         mFingerprintVib.setOnPreferenceChangeListener(this);
         }
+
+        final PreferenceCategory aspectRatioCategory =
+            (PreferenceCategory) getPreferenceScreen().findPreference(KEY_ASPECT_RATIO_CATEGORY);
+        final boolean supportMaxAspectRatio =
+            getResources().getBoolean(com.android.internal.R.bool.config_haveHigherAspectRatioScreen);
+        if (!supportMaxAspectRatio) {
+            getPreferenceScreen().removePreference(aspectRatioCategory);
+        } else {
+            mAspectRatioAppsSelect =
+                (AppMultiSelectListPreference) findPreference(KEY_ASPECT_RATIO_APPS_LIST);
+            mAspectRatioApps =
+                (ScrollAppsViewPreference) findPreference(KEY_ASPECT_RATIO_APPS_LIST_SCROLLER);
+            final String valuesString = Settings.System.getString(getContentResolver(),
+                Settings.System.ASPECT_RATIO_APPS_LIST);
+            List<String> valuesList = new ArrayList<String>();
+            if (!TextUtils.isEmpty(valuesString)) {
+                valuesList.addAll(Arrays.asList(valuesString.split(":")));
+                mAspectRatioApps.setVisible(true);
+                mAspectRatioApps.setValues(valuesList);
+            } else {
+                mAspectRatioApps.setVisible(false);
+            }
+            mAspectRatioAppsSelect.setValues(valuesList);
+            mAspectRatioAppsSelect.setOnPreferenceChangeListener(this);
+        }
     }
 
     @Override
@@ -116,17 +156,30 @@ public class ConfigCenter extends SettingsPreferenceFragment
                     headsUpTimeOut);
             updateHeadsUpTimeOutSummary(headsUpTimeOut);
             return true;
-        } if (preference == mHeadsUpSnoozeTime) {
+        } else if (preference == mHeadsUpSnoozeTime) {
             int headsUpSnooze = Integer.valueOf((String) newValue);
             Settings.System.putInt(getContentResolver(),
                     Settings.System.HEADS_UP_NOTIFICATION_SNOOZE,
                     headsUpSnooze);
             updateHeadsUpSnoozeTimeSummary(headsUpSnooze);
             return true;
-        } if (preference == mFingerprintVib) {
+        } else if (preference == mFingerprintVib) {
             boolean value = (Boolean) newValue;
             Settings.System.putInt(getActivity().getContentResolver(),
                     Settings.System.FINGERPRINT_SUCCESS_VIB, value ? 1 : 0);
+            return true;
+        } else if (preference == mAspectRatioAppsSelect) {
+            Collection<String> valueList = (Collection<String>) newValue;
+            mAspectRatioApps.setVisible(false);
+            if (valueList != null) {
+                Settings.System.putString(getContentResolver(),
+                    Settings.System.ASPECT_RATIO_APPS_LIST, TextUtils.join(":", valueList));
+                mAspectRatioApps.setVisible(true);
+                mAspectRatioApps.setValues(valueList);
+            } else {
+                Settings.System.putString(getContentResolver(),
+                    Settings.System.ASPECT_RATIO_APPS_LIST, "");
+            }
             return true;
         }
         return false;
